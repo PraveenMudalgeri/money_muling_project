@@ -225,14 +225,15 @@ export function NetworkGraph({
     });
 
     filteredEdges.forEach((edge) => {
+      const patternTypes = edge.data.pattern_types || [];
       elements.push({
         group: 'edges',
         data: {
           ...edge.data,
-          edgeColor: getEdgeColor(edge.data.pattern_types),
+          edgeColor: getEdgeColor(patternTypes),
           edgeWidth: isLargeGraph
             ? 1
-            : edge.data.pattern_types.length > 0
+            : patternTypes.length > 0
             ? 2
             : 1.2,
         },
@@ -333,22 +334,29 @@ export function NetworkGraph({
       const criticalNodes = cy.nodes().filter(
         (n: any) => n.data('suspicion_score') > 70
       );
-      criticalNodes.addClass('critical-pulse');
+      
+      if (criticalNodes.length > 0) {
+        criticalNodes.addClass('critical-pulse');
 
-      let pulseState = false;
-      const pulseInterval = setInterval(() => {
-        pulseState = !pulseState;
-        criticalNodes.animate({
-          style: {
-            'border-width': pulseState ? 5 : 3,
-            'border-color': pulseState ? '#fbbf24' : '#f97316',
-          } as any,
-          duration: 1000,
-          easing: 'ease-in-out-sine' as any,
-        });
-      }, 1000);
+        let pulseState = false;
+        const pulseInterval = setInterval(() => {
+          if (!cyRef.current) {
+            clearInterval(pulseInterval);
+            return;
+          }
+          pulseState = !pulseState;
+          criticalNodes.animate({
+            style: {
+              'border-width': pulseState ? 5 : 3,
+              'border-color': pulseState ? '#fbbf24' : '#f97316',
+            } as any,
+            duration: 1000,
+            easing: 'ease-in-out-sine' as any,
+          });
+        }, 1000);
 
-      cy.one('destroy', () => clearInterval(pulseInterval));
+        cy.one('destroy', () => clearInterval(pulseInterval));
+      }
     }
 
     // TASK 2: Smooth hover tooltip with 300ms delay
@@ -431,9 +439,11 @@ export function NetworkGraph({
 
     // TASK 6: Show labels when zoomed in
     cy.on('zoom', () => {
+      if (!cyRef.current) return;
       const zoom = cy.zoom();
       setZoomLevel([zoom]);
       const nodes = cy.nodes();
+      if (!nodes || nodes.length === 0) return;
       if (zoom > 1.5) {
         nodes.style('label', (n: any) => n.data('label'));
         nodes.style('font-size', '9px');
