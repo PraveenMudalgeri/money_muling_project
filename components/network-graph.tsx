@@ -87,13 +87,6 @@ export function NetworkGraph({
   // TASK 8: Performance safeguard
   const isLargeGraph = graphData.nodes.length > 300;
 
-  console.log('[v0] NetworkGraph rendered with:', {
-    nodesCount: graphData?.nodes?.length,
-    edgesCount: graphData?.edges?.length,
-    patternFilter,
-    containerRefExists: !!containerRef.current,
-  });
-
   const getFilteredElements = useCallback(
     (filter: PatternFilter) => {
       if (filter === 'all') {
@@ -114,18 +107,19 @@ export function NetworkGraph({
         return { nodes: suspNodes, edges: suspEdges };
       }
 
-      // Filter by pattern type
+      // Filter by pattern type - find nodes involved in this pattern via edges
+      const relevantEdges = graphData.edges.filter((e) =>
+        e.data.pattern_types.includes(filter)
+      );
+      const nodeIds = new Set<string>();
+      relevantEdges.forEach((e) => {
+        nodeIds.add(e.data.source);
+        nodeIds.add(e.data.target);
+      });
       const patternNodes = graphData.nodes.filter((n) =>
-        n.data.detected_patterns.includes(filter)
+        nodeIds.has(n.data.id)
       );
-      const patternIds = new Set(patternNodes.map((n) => n.data.id));
-      const patternEdges = graphData.edges.filter(
-        (e) =>
-          patternIds.has(e.data.source) &&
-          patternIds.has(e.data.target) &&
-          e.data.pattern_types.includes(filter)
-      );
-      return { nodes: patternNodes, edges: patternEdges };
+      return { nodes: patternNodes, edges: relevantEdges };
     },
     [graphData]
   );
@@ -178,35 +172,20 @@ export function NetworkGraph({
   );
 
   const initCytoscape = useCallback(async () => {
-    console.log('[v0] initCytoscape called:', {
-      containerRefExists: !!containerRef.current,
-      patternFilter,
-    });
-
     if (!containerRef.current) {
-      console.log('[v0] No container ref, skipping init');
       return;
     }
 
     const cytoscape = (await import('cytoscape')).default;
-    console.log('[v0] Cytoscape library loaded');
 
     if (cyRef.current) {
-      console.log('[v0] Destroying existing Cytoscape instance');
       cyRef.current.destroy();
     }
 
     const { nodes: filteredNodes, edges: filteredEdges } =
       getFilteredElements(patternFilter);
 
-    console.log('[v0] Filtered elements:', {
-      nodesCount: filteredNodes.length,
-      edgesCount: filteredEdges.length,
-      sampleNode: filteredNodes[0]?.data,
-    });
-
     if (filteredNodes.length === 0) {
-      console.log('[v0] No filtered nodes, skipping render');
       cyRef.current = null;
       return;
     }
@@ -261,11 +240,6 @@ export function NetworkGraph({
       filteredNodes.length
     );
 
-    console.log('[v0] Creating Cytoscape instance with:', {
-      elementsCount: elements.length,
-      layoutName: layoutConfig.name,
-    });
-
     const cy = cytoscape({
       container: containerRef.current,
       elements,
@@ -293,11 +267,6 @@ export function NetworkGraph({
           style: {
             'font-weight': 'bold',
             'font-size': '9px',
-            'shadow-blur': 12,
-            'shadow-color': 'data(nodeColor)',
-            'shadow-opacity': 0.4,
-            'shadow-offset-x': 0,
-            'shadow-offset-y': 0,
           } as any,
         },
         {
@@ -321,9 +290,6 @@ export function NetworkGraph({
           style: {
             'border-color': '#fbbf24',
             'border-width': 6,
-            'shadow-blur': 20,
-            'shadow-color': '#fbbf24',
-            'shadow-opacity': 0.6,
             'z-index': 100,
           } as any,
         },
@@ -340,10 +306,8 @@ export function NetworkGraph({
         {
           selector: '.critical-pulse',
           style: {
-            'shadow-blur': 25,
-            'shadow-opacity': 0.7,
-            'shadow-offset-x': 0,
-            'shadow-offset-y': 0,
+            'border-width': 4,
+            'border-color': '#fbbf24',
           } as any,
         },
         // TASK 6: hide labels on edges unless hovered
@@ -371,7 +335,8 @@ export function NetworkGraph({
         pulseState = !pulseState;
         criticalNodes.animate({
           style: {
-            'shadow-opacity': pulseState ? 0.8 : 0.3,
+            'border-width': pulseState ? 5 : 3,
+            'border-color': pulseState ? '#fbbf24' : '#f97316',
           } as any,
           duration: 1000,
           easing: 'ease-in-out-sine' as any,
@@ -478,11 +443,6 @@ export function NetworkGraph({
     });
 
     cyRef.current = cy;
-    console.log('[v0] Cytoscape initialized successfully:', {
-      nodeCount: cy.nodes().length,
-      edgeCount: cy.edges().length,
-      zoom: cy.zoom(),
-    });
   }, [
     graphData,
     patternFilter,
@@ -627,7 +587,7 @@ export function NetworkGraph({
         />
 
         {/* TASK 6: Zoom controls */}
-        <div className="absolute bottom-4 left-4 flex flex-col items-center gap-2 z-40">
+        <div className="absolute bottom-4 right-4 flex flex-col items-center gap-2 z-40 bg-background/80 backdrop-blur-sm border border-border rounded-lg p-2">
           <Button
             variant="secondary"
             size="icon"
