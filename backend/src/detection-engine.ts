@@ -18,6 +18,7 @@ import { adjustScoresUsingRelationshipIntelligence } from './relationship-intell
 import { validateTemporalCycles } from './temporal-cycle-validation';
 import { analyzeRingLeadership } from './centrality-analysis';
 import { detectMultiStageFlows } from './multi-stage-flow-analysis';
+import { validateFanInTwoPhase } from './fan-in-validation';
 
 // ─── ADJACENCY LIST GRAPH ────────────────────────────────────────────────────
 // Using adjacency list for O(V+E) traversal, optimal for sparse financial graphs
@@ -1084,6 +1085,20 @@ export function analyzeTransactions(
 
   // Re-sort fraud rings by risk_score descending after adding community rings
   fraudRings.sort((a, b) => b.risk_score - a.risk_score);
+
+  // ── Two-Phase Fan-In Validation ──────────────────────────────────────────────────────
+  // Phase 1: Identify aggregation candidates (fan-in without fraud flag).
+  // Phase 2: Upgrade to confirmed_money_laundering only if corroborated by
+  //   shell chain involvement, cycle participation, rapid outflow, or role
+  //   conflict.  Does not modify existing scores or detection outputs.
+  validateFanInTwoPhase(
+    Array.from(accountMap.values()),
+    transactions,
+    graph,
+    cycles,
+    shellChains,
+    fanOutMap,
+  );
 
   // Build Cytoscape data with detection results
   const graphData = buildCytoscapeData(

@@ -47,6 +47,10 @@ export interface AccountNode {
   // ── Multi-Stage Laundering Flow Detection ──
   laundering_stage?: string;   // "MULTI_STAGE" when node spans multiple pattern types
   flow_pattern?: string[];     // Ordered pattern sequence, e.g. ["fan_in","shell_chain","cycle"]
+
+  // ── Two-Phase Fan-In Validation ──
+  fan_in_classification?: 'aggregation_candidate' | 'confirmed_money_laundering';
+  corroboration_checks?: string[];  // List of triggered corroboration check names
 }
 
 export interface FraudRing {
