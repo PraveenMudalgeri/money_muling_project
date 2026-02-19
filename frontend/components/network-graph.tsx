@@ -689,7 +689,7 @@ export function NetworkGraph({
       </div>
 
       {/* Graph container */}
-      <div className="relative">
+      <div className="relative overflow-hidden">
         <div
           ref={containerRef}
           className="w-full border border-border rounded-lg bg-[#070b14]"
@@ -706,13 +706,14 @@ export function NetworkGraph({
           >
             <ZoomIn className="h-3.5 w-3.5" />
           </Button>
-          <div className="h-20">
+          <div className="h-28">
             <Slider
               value={zoomLevel}
               min={0.2}
               max={4}
               step={0.1}
               orientation="vertical"
+              className="min-h-0! h-full"
               onValueChange={handleZoomSlider}
             />
           </div>
