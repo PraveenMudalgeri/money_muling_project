@@ -1,6 +1,19 @@
 // RIFT 2026 Hackathon - Money Muling Detection Engine Types
 // Strict compliance with required CSV structure and JSON output format
 
+// ─── Detection Mode ──────────────────────────────────────────────────────────
+// Controls which algorithms run in the pipeline.
+export type DetectionMode = 'all' | 'fan-in' | 'fan-out' | 'cycles' | 'shell';
+
+// ─── Per-pattern score breakdown ─────────────────────────────────────────────
+export interface PatternScores {
+  fan_in: number;
+  fan_out: number;
+  cycle: number;
+  shell: number;
+  velocity: number;
+}
+
 export interface RawTransaction {
   transaction_id: string;
   sender_id: string;
@@ -17,6 +30,7 @@ export interface AccountNode {
   total_amount_sent: number;
   total_amount_received: number;
   suspicion_score: number;
+  pattern_scores: PatternScores;
   detected_patterns: string[];
   ring_ids: string[];
   triggered_algorithms: string[];

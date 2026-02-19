@@ -4,6 +4,7 @@ import multer from 'multer';
 import { validateAndParseCSV } from './csv-validator';
 import { analyzeTransactions } from './detection-engine';
 import { generateSampleData } from './sample-data';
+import { DetectionMode } from './types';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -28,6 +29,11 @@ app.get('/api/health', (_req, res) => {
 // POST /api/analyze - Upload CSV file and get analysis results
 app.post('/api/analyze', upload.single('file'), (req, res) => {
   try {
+    // Parse optional detection mode from query string (?mode=fan-in etc.)
+    const VALID_MODES: DetectionMode[] = ['all', 'fan-in', 'fan-out', 'cycles', 'shell'];
+    const modeParam = (req.query.mode as string || 'all').toLowerCase() as DetectionMode;
+    const mode: DetectionMode = VALID_MODES.includes(modeParam) ? modeParam : 'all';
+
     let csvContent: string;
 
     if (req.file) {
@@ -58,8 +64,8 @@ app.post('/api/analyze', upload.single('file'), (req, res) => {
       return;
     }
 
-    // Run detection engine
-    const result = analyzeTransactions(validation.transactions);
+    // Run detection engine with selected mode
+    const result = analyzeTransactions(validation.transactions, mode);
 
     res.json({
       success: true,
@@ -118,8 +124,13 @@ app.post('/api/validate', upload.single('file'), (req, res) => {
 // GET /api/sample-data - Generate sample data and return analysis
 app.get('/api/sample-data', (_req, res) => {
   try {
+    // Parse optional detection mode from query string
+    const VALID_MODES: DetectionMode[] = ['all', 'fan-in', 'fan-out', 'cycles', 'shell'];
+    const modeParam = (_req.query.mode as string || 'all').toLowerCase() as DetectionMode;
+    const mode: DetectionMode = VALID_MODES.includes(modeParam) ? modeParam : 'all';
+
     const sampleData = generateSampleData();
-    const result = analyzeTransactions(sampleData);
+    const result = analyzeTransactions(sampleData, mode);
 
     res.json({
       success: true,

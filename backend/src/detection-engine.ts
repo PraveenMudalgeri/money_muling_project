@@ -11,7 +11,10 @@ import {
   CytoscapeGraphData,
   FanInTransaction,
   ShellChainPath,
+  DetectionMode,
+  PatternScores,
 } from './types';
+import { adjustScoresUsingRelationshipIntelligence } from './relationship-intelligence';
 
 // ─── ADJACENCY LIST GRAPH ────────────────────────────────────────────────────
 // Using adjacency list for O(V+E) traversal, optimal for sparse financial graphs
@@ -273,14 +276,14 @@ function calculateSuspicionScores(
   transactions: RawTransaction[]
 ): void {
   for (const [id, account] of accountMap) {
-    let score = 0;
+    const scores: PatternScores = { fan_in: 0, fan_out: 0, cycle: 0, shell: 0, velocity: 0 };
     const patterns: string[] = [];
     const algorithms: string[] = [];
     const explanations: string[] = [];
 
     // Cycle participation: +40
     if (ringMap.has(id)) {
-      score += 40;
+      scores.cycle += 40;
       patterns.push('cycle');
       algorithms.push('DFS Cycle Detection (Johnson variant)');
       explanations.push(
@@ -291,7 +294,7 @@ function calculateSuspicionScores(
 
     // Fan-in: +30
     if (fanInMap.has(id)) {
-      score += 30;
+      scores.fan_in += 30;
       patterns.push('fan_in');
       algorithms.push('72h Sliding Window Fan-In');
       explanations.push(
@@ -301,7 +304,7 @@ function calculateSuspicionScores(
 
     // Fan-out: +30
     if (fanOutMap.has(id)) {
-      score += 30;
+      scores.fan_out += 30;
       patterns.push('fan_out');
       algorithms.push('72h Sliding Window Fan-Out');
       explanations.push(
@@ -311,7 +314,7 @@ function calculateSuspicionScores(
 
     // Shell chain: +35
     if (shellNodes.has(id)) {
-      score += 35;
+      scores.shell += 35;
       patterns.push('shell_chain');
       algorithms.push('BFS Shell Chain Detection');
       explanations.push(
@@ -329,7 +332,7 @@ function calculateSuspicionScores(
       const days = Math.max(timeSpan / (1000 * 60 * 60 * 24), 1);
       const txPerDay = accountTxs.length / days;
       if (txPerDay > 15) {
-        score += 15;
+        scores.velocity += 15;
         patterns.push('high_velocity');
         algorithms.push('Transaction Velocity Analysis');
         explanations.push(
@@ -337,6 +340,9 @@ function calculateSuspicionScores(
         );
       }
     }
+
+    // Compute total from individual pattern scores
+    let score = scores.fan_in + scores.fan_out + scores.cycle + scores.shell + scores.velocity;
 
     // FALSE POSITIVE REDUCTION
     // If degree > 100, no cycles, consistent intervals -> reduce by 30
@@ -369,6 +375,7 @@ function calculateSuspicionScores(
     // Cap at 100
     score = Math.min(score, 100);
 
+    account.pattern_scores = scores;
     account.suspicion_score = score;
     account.detected_patterns = patterns;
     account.triggered_algorithms = algorithms;
@@ -639,7 +646,8 @@ function buildCytoscapeData(
 // ─── MAIN ANALYSIS FUNCTION ──────────────────────────────────────────────────
 
 export function analyzeTransactions(
-  transactions: RawTransaction[]
+  transactions: RawTransaction[],
+  mode: DetectionMode = 'all'
 ): AnalysisResult {
   const startTime = performance.now();
 
@@ -658,6 +666,7 @@ export function analyzeTransactions(
       total_amount_sent: 0,
       total_amount_received: 0,
       suspicion_score: 0,
+      pattern_scores: { fan_in: 0, fan_out: 0, cycle: 0, shell: 0, velocity: 0 },
       detected_patterns: [],
       ring_ids: [],
       triggered_algorithms: [],
@@ -689,15 +698,27 @@ export function analyzeTransactions(
     }
   }
 
-  // Run detection algorithms
-  const { cycles, ringMap } = detectCycles(graph, allNodes);
-  const fanInMap = detectFanIn(transactions, allNodes);
-  const fanOutMap = detectFanOut(transactions, allNodes);
-  const { chains: shellChains, shellNodes } = detectShellChains(
-    graph,
-    accountMap,
-    transactions
-  );
+  // Run detection algorithms — skip expensive ones when mode targets a single pattern
+  const runCycles   = mode === 'all' || mode === 'cycles';
+  const runFanIn    = mode === 'all' || mode === 'fan-in';
+  const runFanOut   = mode === 'all' || mode === 'fan-out';
+  const runShell    = mode === 'all' || mode === 'shell';
+
+  const { cycles, ringMap } = runCycles
+    ? detectCycles(graph, allNodes)
+    : { cycles: [] as string[][], ringMap: new Map<string, string[]>() };
+
+  const fanInMap = runFanIn
+    ? detectFanIn(transactions, allNodes)
+    : new Map<string, { senders: Set<string>; windowStart: string; windowEnd: string }>();
+
+  const fanOutMap = runFanOut
+    ? detectFanOut(transactions, allNodes)
+    : new Map<string, { receivers: Set<string>; windowStart: string; windowEnd: string }>();
+
+  const { chains: shellChains, shellNodes } = runShell
+    ? detectShellChains(graph, accountMap, transactions)
+    : { chains: [] as string[][], shellNodes: new Set<string>() };
 
   // Calculate suspicion scores
   calculateSuspicionScores(
@@ -728,6 +749,22 @@ export function analyzeTransactions(
       }
     }
   }
+
+  // ── Relationship Intelligence Layer ──────────────────────────────────────
+  // Final adjustment: reduce false positives for legitimate recurring
+  // relationships (rent, payroll, subscriptions).  Runs AFTER all pattern
+  // detection and scoring.  Never modifies accounts in fraud cycles.
+  const cycleMembers = new Set<string>();
+  for (const cycle of cycles) {
+    for (const nodeId of cycle) {
+      cycleMembers.add(nodeId);
+    }
+  }
+  adjustScoresUsingRelationshipIntelligence(
+    Array.from(accountMap.values()),
+    transactions,
+    cycleMembers,
+  );
 
   // Build Cytoscape data with detection results
   const graphData = buildCytoscapeData(
