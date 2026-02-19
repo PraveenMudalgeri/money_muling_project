@@ -4,7 +4,7 @@
 
 **Team:** NOCTABYTE'S
 
-**Live Demo:** [https://v0-financial-forensics-engine.vercel.app/](https://v0-financial-forensics-engine.vercel.app/)
+**Live Demo:** [https://money-muling-detection.vercel.app/](https://money-muling-detection.vercel.app/)
 
 **Repository:** [github.com/PraveenMudalgeri/v0-financial-forensics-engine](https://github.com/PraveenMudalgeri/v0-financial-forensics-engine)
 
